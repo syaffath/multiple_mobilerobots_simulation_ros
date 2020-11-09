@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<launch>
+
+<param name="robot_description" command="$(find xacro)/xacro.py '$(find my_robot_urdf)/urdf_roscontrol/urdf/robotnyoba.xacro'" />
+
+    <arg name="x" default="0"/>
+    <arg name="y" default="0"/>
+    <arg name="z" default="0.1"/>
+
+    <node name="mobrobot_spawn" pkg="gazebo_ros" type="spawn_model" output="screen"
+          args="-urdf -param robot_description -model mobile_robot-x $(arg x) -y $(arg y) -z $(arg z)" />
+
+  <!-- Load controller settings -->
+  <rosparam file="$(find my_robot_urdf)/config/MB_diffdrive.yaml" command="load" />
+  <rosparam file="$(find my_robot_urdf)/config/MB_velocitycontroller.yaml" command="load" />
+
+  <!-- Load controller manager -->
+  <node name="MB_controller_manager" pkg="controller_manager" type="spawner" respawn="false"
+    output="screen" args="mobile_robot_controller" />
+
+</launch>

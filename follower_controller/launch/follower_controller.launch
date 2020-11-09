@@ -1,0 +1,3 @@
+<launch>
+     <node name="follower_1_Controller" pkg="follower_controller" type="follower_controller.py" output ="screen" />
+</launch>

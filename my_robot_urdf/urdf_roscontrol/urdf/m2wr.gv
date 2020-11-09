@@ -1,0 +1,5 @@
+digraph G {
+node [shape=box];
+"link_chassis" [label="link_chassis"];
+node [shape=ellipse, color=blue, fontcolor=blue];
+}

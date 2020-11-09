@@ -1,0 +1,24 @@
+<launch>
+  <!-- No namespace here as we will share this description. 
+       Access with slash at the beginning -->
+  <param name="robot_description"
+    command="$(find xacro)/xacro.py '$(find my_robot_urdf)/urdf_roscontrol/urdf/robotnyoba.xacro'"  />
+
+  <!-- BEGIN ROBOT leader-->
+  <group ns="robot_leader">
+    <param name="tf_prefix" value="robot_leader_tf" />
+    <include file="$(find my_robot_urdf)/launch/one_robot.launch" >
+      <arg name="init_pose" value="-x 0 -y 0 -z 0.1" />
+      <arg name="robot_name"  value="mobile_robot-Leader" />
+    </include>
+  </group>
+
+  <!-- BEGIN ROBOT follower 1-->
+  <group ns="robot_follower1">
+    <param name="tf_prefix" value="robot_follower1_tf" />
+    <include file="$(find my_robot_urdf)/launch/one_robot.launch" >
+      <arg name="init_pose" value="-x -1 -y 0 -z 0.1" />
+      <arg name="robot_name"  value="mobile_robot-Follower1" />
+    </include>
+  </group>
+</launch>

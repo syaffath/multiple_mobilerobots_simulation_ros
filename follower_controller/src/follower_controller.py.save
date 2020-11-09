@@ -1,0 +1,218 @@
+#! /usr/bin/env python
+
+import rospy
+import math
+from nav_msgs.msg import Odometry
+from tf.transformations import euler_from_quaternion
+from geometry_msgs.msg import Point, Twist
+from math import atan2
+from std_msgs.msg import Int32, Float32
+
+RTD = 180.0/math.pi
+
+x_leader = 0.0
+y_leader = 0.0
+theta_leader = 0.0
+
+x_follower1 = 0.0
+y_follower1 = 0.0
+theta_follower1 = 0.0
+
+leader_speed_x = 0
+leader_speed_z = 0
+
+def Leader_odom(msg):
+    global x_leader
+    global y_leader
+    global theta_leader
+
+    x_leader = msg.pose.pose.position.x
+    y_leader =  msg.pose.pose.position.y
+
+    rot_q_leader = msg.pose.pose.orientation
+    (roll, pitch, theta_leader) = euler_from_quaternion([rot_q_leader.x, rot_q_leader.y, rot_q_leader.z, rot_q_leader.w])
+#    print "------------------------------------------------"
+#    print "x_leader = " + str(x_leader)
+#    print "y_leader = " + str(y_leader)
+#    print "theta_leader = " + str(theta_leader)
+
+def Follower1_odom(msg):
+    global x_follower1
+    global y_follower1
+    global theta_follower1
+
+    x_follower1 = msg.pose.pose.position.x
+    y_follower1 = msg.pose.pose.position.y
+
+    rot_q_follower1 = msg.pose.pose.orientation
+    (roll, pitch, theta_follower1) = euler_from_quaternion([rot_q_follower1.x, rot_q_follower1.y, rot_q_follower1.z, rot_q_follower1.w])
+#    print "------------------------------------------------"
+#    print "x_follower1 = " + str(x_follower1)
+#    print "y_follower1 = " + str(y_follower1)
+#    print "theta_follower1 = " + str(theta_follower1)
+
+def Leader_speed_x(msg):
+    global leader_speed_x
+    leader_speed_x = msg.data
+
+def Leader_speed_z(msg):
+    global leader_speed_z
+    leader_speed_z = msg.data
+
+rospy.init_node("follower_1_Controller")
+
+sub_leader = rospy.Subscriber("/robot_Leader_odom", Odometry, Leader_odom)
+sub_follower1 = rospy.Subscriber("/robot_Follower1_odom", Odometry, Follower1_odom)
+sub_speed_x = rospy.Subscriber("/robot_Leader/speed_x", Float32, Leader_speed_x)
+sub_speed_z = rospy.Subscriber("/robot_Leader/speed_z", Float32, Leader_speed_z)
+
+pub = rospy.Publisher("/robot_follower1/mobile_robot_controller/cmd_vel", Twist, queue_size=1)
+pub_x = rospy.Publisher("/robot_follower1/pose_x", Float32, queue_size=1)
+pub_y = rospy.Publisher("/robot_follower1/pose_y", Float32, queue_size=1)
+pub_theta = rospy.Publisher("/robot_follower1/pose_theta", Float32, queue_size=1)
+
+#pub_x_leader = rospy.Publisher("/robot_leader/pose_x", Float32, queue_size=1)
+#pub_y_leader = rospy.Publisher("/robot_leader/pose_y", Float32, queue_size=1)
+#pub_theta_leader = rospy.Publisher("/robot_leader/pose_theta", Float32, queue_size=1)
+
+speed = Twist()
+
+t0 = 0
+
+error_x_follower1_before = 0
+error_z_follower1_before = 0
+error_theta_before = 0
+
+Kp_lin = 0.6 #0.5
+Ki_lin = 0.0
+Kd_lin = 0.2
+
+Kp_ang = 0.05
+Ki_ang = 0.0
+Kd_ang = 0.0
+
+Kp_spin = 0.5
+Ki_spin = 0.0
+Kd_spin = 0.2
+
+proportional_x = 0
+integral_x = 0
+derivative_x = 0
+
+proportional_z = 0
+integral_z = 0
+derivative_z = 0
+
+proportional_z_spin = 0
+integral_z_spin = 0
+derivative_z_spin = 0
+
+rate = rospy.Rate(4)
+setpoint = Point()
+setpoint.x = 0.0
+setpoint.y = 0.0
+#setpoint_lF.x = 0.0
+#error_x_follower1_lF = 0.0
+#setpoint_lF.y = 0.0
+
+while not rospy.is_shutdown():
+    t1 = rospy.Time.now().to_sec()
+    dt = t1 - t0
+
+    theta_follower1_degree = math.degrees(theta_follower1)
+    theta_leader_degree = math.degrees(theta_leader)
+
+    # angle strategy for global coordinate frame
+    desired_form_distance = 1
+    desired_form_angle = -90 #0
+    setpoint.x = x_leader - (desired_form_distance*round(math.cos(math.radians(desired_form_angle)),1)*round(math.cos(math.radians(theta_leader)),1)) + (desired_form_distance*round(math.sin(math.radians(desired_form_angle)),1)*round(math.sin(math.radians(theta_leader)),1))
+    setpoint.y = y_leader - (desired_form_distance*round(math.cos(math.radians(desired_form_angle)),1)*round(math.sin(math.radians(theta_leader)),1)) - (desired_form_distance*round(math.sin(math.radians(desired_form_angle)),1)*round(math.cos(math.radians(theta_leader)),1))
+    error_x_follower1 = (setpoint.x - x_follower1)
+    error_y_follower1 = (setpoint.y - y_follower1)
+
+    angle_to_setpoint = math.degrees(atan2(error_y_follower1, error_x_follower1))
+    error_z_follower1 = (theta_follower1_degree - angle_to_setpoint)
+
+    delta_error_x_follower1 = error_x_follower1 - error_x_follower1_before
+    delta_error_z_follower1 = (error_z_follower1) - error_z_follower1_before
+
+    proportional_x = error_x_follower1
+    integral_x += (error_x_follower1*dt)
+    derivative_x = delta_error_x_follower1/dt
+    speed_x = Kp_lin*proportional_x + Ki_lin*integral_x + Kd_lin*derivative_x
+
+    proportional_z = abs(error_z_follower1)
+    integral_z += (abs(error_z_follower1)*dt)
+    derivative_z = delta_error_z_follower1/dt
+    speed_z = Kp_ang*proportional_z + Ki_ang*integral_z + Kd_ang*derivative_z
+
+    #spin controller
+    error_theta = theta_leader - theta_follower1
+    delta_error_theta = error_theta - error_theta_before
+    
+    proportional_z_spin = abs(error_theta)
+    integral_z_spin += (abs(error_theta)*dt)
+    derivative_z_spin = delta_error_theta/dt
+    speed_z_spin = Kp_spin*proportional_z_spin + Ki_spin*integral_z_spin + Kd_spin*derivative_z_spin
+    
+    if(abs(error_x_follower1) > 0.01 or abs(error_z_follower1) > 0.01):
+        if error_z_follower1 > 0.01:
+            speed.linear.x = speed_x #0.0
+            speed.angular.z = speed_z
+        elif error_z_follower1 < 0.01:
+            speed.linear.x = speed_x #0.0
+            speed.angular.z = -speed_z
+        else:
+            speed.linear.x = speed_x
+            speed.angular.z = 0
+
+    while((abs(error_x_follower1))<= 0.01 and abs(error_z_follower1) <= 0.01): 
+        desired_form_distance = 60
+        desired_form_angle = -90
+        setpoint.x = x_leader - (desired_form_distance*round(math.cos(math.radians(desired_form_angle)),1)*round(math.cos(math.radians(theta_leader)),1)) + (desired_form_distance*round(math.sin(math.radians(desired_form_angle)),1)*round(math.sin(math.radians(theta_leader)),1))
+        setpoint.y = y_leader - (desired_form_distance*round(math.cos(math.radians(desired_form_angle)),1)*round(math.sin(math.radians(theta_leader)),1)) - (desired_form_distance*round(math.sin(math.radians(desired_form_angle)),1)*round(math.cos(math.radians(theta_leader)),1))
+        error_x_follower1 = (setpoint.x - x_follower1)
+        error_y_follower1 = (setpoint.y - y_follower1)        
+        speed.linear.x = 0 #
+
+leader_speed_x
+        speed.angular.z = 0 #-leader_speed_z
+        #print (x_follower1)
+        #print (y_follower1)
+        print "---------------ZERO CONDITION----------------------"
+    #    print "error_x_follower1 = " + str(error_x_follower1)
+     #   print "error_z_follower1 = " + str(error_z_follower1)
+        print "speed_x = " + str(leader_speed_x)
+        print "speed_z = " + str(leader_speed_z)
+    #    print "theta_follower1 = " + str(theta_follower1_degree)
+     #   print "angle_to_setpoint = " + str(angle_to_setpoint)        
+        pub.publish(speed)
+        pub_x.publish(x_follower1)
+    	pub_y.publish(y_follower1)
+    	pub_theta.publish(theta_follower1_degree)
+	rate.sleep()
+
+    pub.publish(speed)
+    pub_x.publish(x_follower1)
+    pub_y.publish(y_follower1)
+    pub_theta.publish(theta_follower1_degree)
+
+#    pub_x_leader.publish(x_leader)
+ #   pub_y_leader.publish(y_leader)
+  #  pub_theta_leader.publish(theta_leader_degree)
+    print "-----------------FOLLOW CONDITION---------------------"
+    print "error_x_follower1 = " + str(error_x_follower1)
+    print "error_z_follower1 = " + str(error_z_follower1)
+    print "speed_x = " + str(speed_x)
+    print "speed_z = " + str(speed_z)
+    print "theta_follower1 = " + str(theta_follower1_degree)
+    print "angle_to_setpoint = " + str(angle_to_setpoint)
+
+    t0 = t1
+    error_x_follower1_before = error_x_follower1
+    error_z_follower1_before = abs(error_z_follower1)
+#    error_theta_before = (error_theta)
+    rate.sleep()
+
+
+

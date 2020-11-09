@@ -1,0 +1,3 @@
+<launch>
+     <node name="speed_controller" pkg="leader_controller" type="speed_controller.py" output ="screen" />
+</launch>
