@@ -1,7 +1,7 @@
 # multiple_mobilerobots_simulation_ros
 Multiple mobile robots simulation using Ubuntu WSL (Windows Subsystem for Linux).
 
-# What things will be used?
+# Tools
 1. Ubuntu WSL 16.04
 2. Gazebo 7.0.0
 3. Python 3.5.2
